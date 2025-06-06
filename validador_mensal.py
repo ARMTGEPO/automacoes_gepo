@@ -11,28 +11,32 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     inconsistencias = {}
     estados_efetivados = ["1 - Aprovado", "2 - Reprovado", "3 - Evadido"]
 
-    # Regra 1
+    # Parâmetro - Considerar apenas turmas de ação educacional
+    df = df[df['Quadro de Ação'] == "Ação Educacional"]
+
+    # Regra 1 - Identificar matrículas desistentes com carga horária contabilizada.
     mask1 = (df["Estado conf. CODEPE"] == "4 - Desistente") & (df["CH_Apurada_Mes"] > 0)
     inconsistencias['Desistentes com CH Apurada'] = df.loc[mask1, [
         "Matrícula", "Turma", "CPF do Aluno", "Estado conf. CODEPE", "CH_Apurada_Mes"
     ]]
 
-    # Regra 2
-    mask2 = (df["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df["CH_Apurada_Mes"] != 0.00)
-    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df.loc[mask2, [
+    # Regra 2 - Identificar matrículas em turmas encerradas em períodos anteriores que estão contabilizando carga horária no período vigente.
+    df_filtrado_1 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
+    mask2 = (df_filtrado_1["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df_filtrado_1["CH_Apurada_Mes"] != 0.00)
+    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df_filtrado_1.loc[mask2, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
         "Estado da Turma", "Estado conf. CODEPE", "CH_Apurada_Mes", "Termino da Execução da Turma"
     ]]
 
-    # Regra 3
-    df_filtrado = df[df["Estado da Matrícula do Aluno"] != "Matrícula Cancelada"]
-    mask3 = df_filtrado.groupby(["CPF do Aluno", "Turma"])["Matrícula"].transform('nunique') > 1
-    inconsistencias['CPF com Múltiplas Matrículas na mesma turma'] = df_filtrado.loc[mask3, [
+    # Regra 3 - Identificar múltiplas matrículas ativas por CPF na mesma turma.
+    df_filtrado_2 = df[df["Estado da Matrícula do Aluno"] != "Matrícula Cancelada"]
+    mask3 = df_filtrado_2.groupby(["CPF do Aluno", "Turma"])["Matrícula"].transform('nunique') > 1
+    inconsistencias['CPF com Múltiplas Matrículas na mesma turma'] = df_filtrado_2.loc[mask3, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "CPF do Aluno", "Estado conf. CODEPE", 
         "Estado da Matrícula do Aluno", "Recurso Financeiro", "CH_Apurada_Mes"
     ]].sort_values(["CPF do Aluno", "Turma"])
 
-    # Regra 4
+    # Regra 4 - Identificar matrículas de um mesmo CPF em mais de 02 turmas PSG.
     mask_psg = (df["Recurso Financeiro"] == "PSG") & (df["Estado conf. CODEPE"] == "6 - Em Processo")
     cpf_counts = df.loc[mask_psg, "CPF do Aluno"].value_counts().reset_index()
     cpf_counts.columns = ["CPF do Aluno", "count"]
@@ -43,7 +47,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         "Estado conf. CODEPE", "CH_Apurada_Mes"
     ]].sort_values("CPF do Aluno")
 
-    # Regra 5
+    # Regra 5 - Identificar matrículas efetivadas em turmas em processo. Entende-se como matrículas efetivadas aquelas com Estado CODEPE “Aprova, Reprovada ou Evadida”.
     mask5 = df["Estado conf. CODEPE"].isin(estados_efetivados) & df["Estado da Turma"].str.contains("Em Processo")
     inconsistencias['Efetivados em Turmas Ativas'] = df.loc[mask5, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "CPF do Aluno", "Estado conf. CODEPE", 
