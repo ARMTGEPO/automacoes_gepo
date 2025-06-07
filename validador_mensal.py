@@ -19,6 +19,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         "Matrícula", "Turma", "CPF do Aluno", "Estado conf. CODEPE", "CH_Apurada_Mes"
     ]]
 
+
     # Regra 2
     df_filtrado_2 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
     mask2 = (df_filtrado_2["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df_filtrado_2["CH_Apurada_Mes"] != 0.00)
