@@ -4,22 +4,25 @@ from fpdf import FPDF, XPos, YPos
 from datetime import datetime
 import tempfile
 
-st.set_page_config(page_title="Validador Produção", layout="centered", page_icon=":bar_chart")
+st.set_page_config(page_title="Validador Produção", layout="wide", page_icon=":bar_chart")
 
 # === Função de validação e geração do relatório ===
 def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relatorio_inconsistencias.pdf"):
     inconsistencias = {}
     estados_efetivados = ["1 - Aprovado", "2 - Reprovado", "3 - Evadido"]
 
-    # Regra 1
+    df = df[df["Quadro de Ação"] == "Ação Educacional"]
+
+    # Regra 1 - Desistentes com CH Apurada
     mask1 = (df["Estado conf. CODEPE"] == "4 - Desistente") & (df["CH_Apurada_Mes"] > 0)
     inconsistencias['Desistentes com CH Apurada'] = df.loc[mask1, [
         "Matrícula", "Turma", "CPF do Aluno", "Estado conf. CODEPE", "CH_Apurada_Mes"
     ]]
 
     # Regra 2
-    mask2 = (df["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df["CH_Apurada_Mes"] != 0.00)
-    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df.loc[mask2, [
+    df_filtrado_2 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
+    mask2 = (df_filtrado_2["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df_filtrado_2["CH_Apurada_Mes"] != 0.00)
+    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df_filtrado_2.loc[mask2, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
         "Estado da Turma", "Estado conf. CODEPE", "CH_Apurada_Mes", "Termino da Execução da Turma"
     ]]
@@ -133,6 +136,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     pdf.add_page()
     pdf.set_font('Helvetica', 'I', 8)
     pdf.cell(0, 8, "Relatório gerado automaticamente pelo sistema de validação", align='C')
+    pdf.cell(0, 8, f"{username}", align='C')
     pdf.output(output_path)
 
 # === Interface Principal ===
@@ -140,8 +144,19 @@ st.title("📝 Validação de Produção Mensal")
 username = st.session_state.get("username", "usuário")
 st.markdown(f"Olá, **{username}**! Faça upload do Relatório Analítico Mensal de Produção.")
 
-competencia_input = st.text_input("🗓️ Informe a competência (MM/AAAA)", placeholder="Ex: 05/2025")
-uploaded_file = st.file_uploader("📂 Selecione o arquivo CSV", type=["csv"])
+with st.expander("📖 Validações aplicadas", expanded=True):
+    st.write("""
+    1. **Desistentes com CH Apurada**: Verifica se alunos desistentes têm carga horária apurada no período.
+    2. **Turmas Encerradas em Exercício Anterior contabilizando CH**: Identifica turmas encerradas no mês anterior com carga horária apurada no período.
+    3. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma.
+    4. **CPF com > 2 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
+    5. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo"   .
+    Essas validações ajudam a garantir a integridade dos dados e a conformidade com as regras do sistema.
+             """)
+
+st.sidebar.text("Para iniciar, informe a competência e faça o upload do arquivo CSV obtido do SIG.")
+competencia_input = st.sidebar.text_input("🗓️ Informe a competência (MM/AAAA)", placeholder="Ex: 05/2025")
+uploaded_file = st.sidebar.file_uploader("📂 Selecione o arquivo CSV", type=["csv"])
 
 if competencia_input and uploaded_file:
     try:
@@ -155,12 +170,174 @@ if competencia_input and uploaded_file:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, tmp.name)
             with open(tmp.name, "rb") as f:
-                st.success("✅ Relatório gerado com sucesso!")
-                st.download_button("📄 Baixar PDF", data=f, file_name="relatorio_inconsistencias.pdf", mime="application/pdf")
+                st.sidebar.success("✅ Relatório gerado com sucesso!")
+                st.sidebar.download_button("📄 Baixar PDF", data=f, file_name="relatorio_inconsistencias.pdf", mime="application/pdf")
 
     except ValueError:
         st.error("❌ Competência inválida. Use o formato MM/AAAA.")
     except Exception as e:
         st.error(f"❌ Erro ao processar o arquivo: {e}")
 elif uploaded_file and not competencia_input:
-    st.warning("⚠️ Informe a competência antes de processar o arquivo.")
+        st.warning("⚠️ Informe a competência antes de processar o arquivo.")
+        
+# Estatísticas descritivas do dataframe
+if 'df' in locals():
+    st.divider()
+    st.subheader("📊 Estatísticas Descritivas")
+
+    # === Filtros ===
+    with st.expander("🔎 Filtrar dados"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            filtro_estado_turma = st.multiselect("Estado da Turma", options=sorted(df["Estado da Turma"].dropna().unique()), placeholder="Selecione estados")
+            filtro_recurso = st.multiselect("Recurso Financeiro", options=sorted(df["Recurso Financeiro"].dropna().unique()), placeholder="Selecione recursos")
+            filtro_estado_matricula = st.multiselect("Estado da Matrícula do Aluno", options=sorted(df["Estado da Matrícula do Aluno"].dropna().unique()), placeholder="Selecione estados")
+            filtro_condicao = st.multiselect("Condição", options=sorted(df["Condição"].dropna().unique()), placeholder="Selecione condições")
+        with col2:
+            filtro_estado_codepe = st.multiselect("Estado conf. CODEPE", options=sorted(df["Estado conf. CODEPE"].dropna().unique()),  placeholder="Selecione estados")
+            filtro_uo = st.multiselect("Unidade Operativa da Turma", options=sorted(df["Unidade Operativa da Turma"].dropna().unique()), placeholder="Selecione unidades")
+            filtro_modalidade = st.multiselect("Modalidade", options=sorted(df["Modalidade"].dropna().unique()), placeholder="Selecione modalidades")
+            filtro_quadro_acao = st.multiselect("Quadro de Ação", options=sorted(df["Quadro de Ação"].dropna().unique()), placeholder="Selecione quadros", default=["Ação Educacional"])
+
+    # Aplica os filtros
+    df_filtrado = df.copy()
+
+    if filtro_estado_turma:
+        df_filtrado = df_filtrado[df_filtrado["Estado da Turma"].isin(filtro_estado_turma)]
+    if filtro_recurso:
+        df_filtrado = df_filtrado[df_filtrado["Recurso Financeiro"].isin(filtro_recurso)]
+    if filtro_estado_matricula:
+        df_filtrado = df_filtrado[df_filtrado["Estado da Matrícula do Aluno"].isin(filtro_estado_matricula)]
+    if filtro_estado_codepe:
+        df_filtrado = df_filtrado[df_filtrado["Estado conf. CODEPE"].isin(filtro_estado_codepe)]
+    if filtro_uo:
+        df_filtrado = df_filtrado[df_filtrado["Unidade Operativa da Turma"].isin(filtro_uo)]
+    if filtro_modalidade:
+        df_filtrado = df_filtrado[df_filtrado["Modalidade"].isin(filtro_modalidade)]
+    if filtro_quadro_acao:
+        df_filtrado = df_filtrado[df_filtrado["Quadro de Ação"].isin(filtro_quadro_acao)]
+    if filtro_condicao:
+        df_filtrado = df_filtrado[df_filtrado["Codição"].isin(filtro_condicao)]
+
+    # === Agrupamento por Recurso Financeiro ===
+    resumo = df_filtrado.groupby("Recurso Financeiro")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo = resumo.rename(columns={
+        "CH_Apurada_Mes": "Carga Horária Total",
+        "Matricula_Mes": "Matrículas Apuradas"
+    })
+
+    # Formatação numérica estilo brasileiro
+    for col in ["Carga Horária Total", "Matrículas Apuradas"]:
+        resumo[col] = resumo[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+    # Totais
+    total_ch = resumo["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_mat = resumo["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+
+    total_row = pd.DataFrame([["Total Geral", 
+                            f"{total_ch:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                            f"{total_mat:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
+                            columns=resumo.columns)
+
+    resumo = pd.concat([resumo, total_row], ignore_index=True)
+
+    # CSS com alinhamento especial
+    st.markdown("""
+        <style>
+        .custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: sans-serif;
+        }
+        .custom-table thead th {
+            background-color: #f0f2f6;
+            color: #333333;
+            padding: 0.1rem;
+            text-align: center;
+            border-bottom: 1px solid #cccccc;
+        }
+        .custom-table tbody td {
+            padding: 0.1rem;
+            text-align: center;
+            border-bottom: 1px solid #eaeaea;
+            font-size: 15px;
+        }
+        .custom-table tbody td:first-child {
+            text-align: left;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # === TABELA 1: Recurso Financeiro ===
+    st.markdown("### 📘 Resumo por Recurso Financeiro")
+    st.markdown(resumo.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
+
+    # === TABELA 2: Modalidade ===
+    resumo_modalidade = df_filtrado.groupby("Modalidade")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo_modalidade = resumo_modalidade.rename(columns={
+        "CH_Apurada_Mes": "Carga Horária Total",
+        "Matricula_Mes": "Matrículas Apuradas"
+    })
+
+    for col in ["Carga Horária Total", "Matrículas Apuradas"]:
+        resumo_modalidade[col] = resumo_modalidade[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+    total_ch_m = resumo_modalidade["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_mat_m = resumo_modalidade["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+
+    total_row_modalidade = pd.DataFrame([["Total Geral", 
+                                        f"{total_ch_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                        f"{total_mat_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
+                                        columns=resumo_modalidade.columns)
+
+    resumo_modalidade = pd.concat([resumo_modalidade, total_row_modalidade], ignore_index=True)
+
+    st.markdown("### 📗 Resumo por Modalidade")
+    st.markdown(resumo_modalidade.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
+
+    # === TABELA 3: Unidade Operativa ===
+    resumo_uo = df_filtrado.groupby("Unidade Operativa da Turma")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo_uo = resumo_uo.rename(columns={
+        "CH_Apurada_Mes": "Carga Horária Total",
+        "Matricula_Mes": "Matrículas Apuradas"
+    })
+
+    for col in ["Carga Horária Total", "Matrículas Apuradas"]:
+        resumo_uo[col] = resumo_uo[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+    total_ch_uo = resumo_uo["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_mat_uo = resumo_uo["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+
+    total_row_uo = pd.DataFrame([["Total Geral", 
+                                f"{total_ch_uo:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                f"{total_mat_uo:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
+                                columns=resumo_uo.columns)
+
+    resumo_uo = pd.concat([resumo_uo, total_row_uo], ignore_index=True)
+
+    st.markdown("### 📙 Resumo por Unidade Operativa da Turma")
+    st.markdown(resumo_uo.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
+
+    # === TABELA 4: Estado conf. CODEPE ===
+    resumo_estado_codepe = df_filtrado.groupby("Estado conf. CODEPE")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo_estado_codepe = resumo_estado_codepe.rename(columns={
+        "CH_Apurada_Mes": "Carga Horária Total",
+        "Matricula_Mes": "Matrículas Apuradas"
+    })
+
+    for col in ["Carga Horária Total", "Matrículas Apuradas"]:
+        resumo_estado_codepe[col] = resumo_estado_codepe[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+    total_ch_ec = resumo_estado_codepe["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_mat_ec = resumo_estado_codepe["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+
+    total_row_ec = pd.DataFrame([["Total Geral", 
+                                f"{total_ch_ec:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                f"{total_mat_ec:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
+                                columns=resumo_estado_codepe.columns)
+
+    resumo_estado_codepe = pd.concat([resumo_estado_codepe, total_row_ec], ignore_index=True)
+
+    st.markdown("### 📒 Resumo por Estado conf. CODEPE")
+    st.markdown(resumo_estado_codepe.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
