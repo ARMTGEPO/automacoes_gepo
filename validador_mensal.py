@@ -3,6 +3,7 @@ import pandas as pd
 from fpdf import FPDF, XPos, YPos
 from datetime import datetime
 import tempfile
+from email_validator import validate_email, EmailNotValidError
 
 st.set_page_config(page_title="Validador Produção", layout="wide", page_icon=":bar_chart")
 
@@ -54,6 +55,46 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         "Estado da Turma", "CH_Apurada_Mes"
     ]]
 
+    # Regra 6 - Validação Rápida de E-mails
+    df["Data de Nascimento do Aluno"] = pd.to_datetime(df["Data de Nascimento do Aluno"], errors='coerce', dayfirst=True)
+    hoje = pd.to_datetime(datetime.today())
+    df["idade"] = ((hoje - df["Data de Nascimento do Aluno"]).dt.days / 365.25).fillna(0)
+
+    # Aplicando somente para alunos maiores de 18
+    df_maiores = df[df["idade"] >= 18].copy()
+
+    # Lista de domínios comuns incorretos
+    dominios_proibidos = [
+        "alunosenac.com", "ghotmail.com", "hotail.com", "gamil.com",
+        "outloook.com", "gmial.com", "002gmail.com", "77gmail.com","g.mail.com", "verificar.com",
+        "verificar.com.br", "edu.mt.gov.bt", "gmal.com", "gmai.com", "hotimail.com", "homail.comm",
+        "verfificar.com", "gamail.com", "gmail.co", "33gmail.com",
+        "gmil.com", "gmail.com.com", "yaool.com",
+        "gmail.coom", "00gmail.com", "outlokk.com", "edu.mt.gv.br",
+        "edu.mtgov.br", "gmail.cocm", "84gmail.com"
+    ]
+
+    def email_invalido(email):
+        if not isinstance(email, str) or email.strip().lower() in ["", "na", "null", "nan", "-", "--"]:
+            return True
+        try:
+            # Validação apenas de sintaxe
+            email_info = validate_email(email, check_deliverability=False)
+            dominio = email_info.domain.lower()
+            if dominio in dominios_proibidos:
+                return True
+        except EmailNotValidError:
+            return True
+        return False
+
+    # Aplicando a verificação nos maiores de idade
+    df_maiores["Email Invalido"] = df_maiores["E-mail"].apply(email_invalido)
+
+    # Armazenando a inconsistência
+    inconsistencias['E-mails Inválidos'] = df_maiores[df_maiores["Email Invalido"] == True][[
+        "Matrícula", "Turma", "Nome do Aluno", "CPF do Aluno", "E-mail"
+    ]]
+    
     # Geração do PDF
     pdf = FPDF(orientation='L')
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -151,7 +192,8 @@ with st.expander("📖 Validações aplicadas", expanded=True):
     2. **Turmas Encerradas em Exercício Anterior contabilizando CH**: Identifica turmas encerradas no mês anterior com carga horária apurada no período.
     3. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma.
     4. **CPF com > 2 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
-    5. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo"   .
+    5. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo".
+    6. **E-mails Inválidos**: Valida e-mails de alunos maiores de 18 anos, verificando se estão no formato correto e se não pertencem a domínios comuns incorretos.   
     Essas validações ajudam a garantir a integridade dos dados e a conformidade com as regras do sistema.
              """)
 
