@@ -6,6 +6,7 @@ import tempfile
 from email_validator import validate_email, EmailNotValidError
 
 st.set_page_config(page_title="Validador Produção", layout="wide", page_icon=":bar_chart")
+st.logo(image="img/senac_logo.png")
 
 st.markdown("""
     <style>
@@ -335,10 +336,10 @@ if 'df' in locals():
         df_filtrado = df_filtrado[df_filtrado["Condição"].isin(filtro_condicao)]
 
     # === Agrupamento por Recurso Financeiro ===
-    resumo = df_filtrado.groupby("Recurso Financeiro")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo = df_filtrado.groupby("Recurso Financeiro")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
     resumo = resumo.rename(columns={
         "CH_Apurada_Mes": "Carga Horária Total",
-        "Matricula_Mes": "Matrículas Apuradas"
+        "Matricula_Apurada_Mes": "Matrículas Apuradas"
     })
 
     # Formatação numérica estilo brasileiro
@@ -383,38 +384,72 @@ if 'df' in locals():
         </style>
     """, unsafe_allow_html=True)
 
+    # === KPI
+    col1, col2, col3 = st.columns(3)
+    
+    # Total CH Apurada no mês
+    valor_ch = round(df_filtrado["CH_Apurada_Mes"].sum(), 0)
+    total_ch = f'{valor_ch:,.0f}'.replace(",", ".")
+
+    # Total de Matrículas novas no mês
+    valor_mt_nova = round(df_filtrado['Mat_Nova'].sum(), 0)
+    total_mt_nova = f'{valor_mt_nova:,.0f}'.replace(',', '.')
+
+    # Matrículas ajustadas no mês
+    valor_mt_ajuste = round(df_filtrado['Ajuste_Matriculas_Mes'].sum(), 0)
+    total_mt_ajuste = f'{valor_mt_ajuste:,.0f}'.replace(',','.')
+
+
+    with col1:
+        st.metric("#### Carga Horária Apurada no Mês", total_ch)
+
+    with col2:
+        st.metric("#### Matrículas Novas no Mês", total_mt_nova)
+
+    with col3:
+        st.metric("#### Ajuste de Matrículas no Mês", total_mt_ajuste)        
+
     # === TABELA 1: Recurso Financeiro ===
     st.markdown("### 📘 Resumo por Recurso Financeiro")
     st.markdown(resumo.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
 
     # === TABELA 2: Modalidade ===
-    resumo_modalidade = df_filtrado.groupby("Modalidade")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    # Agrupamento e soma
+    resumo_modalidade = df_filtrado.groupby("Modalidade")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
+
+    # Renomeando colunas
     resumo_modalidade = resumo_modalidade.rename(columns={
         "CH_Apurada_Mes": "Carga Horária Total",
-        "Matricula_Mes": "Matrículas Apuradas"
+        "Matricula_Apurada_Mes": "Matrículas Apuradas"
     })
 
+    # SALVA uma cópia dos totais ANTES de formatar como string
+    total_ch_m = resumo_modalidade["Carga Horária Total"].sum()
+    total_mat_m = resumo_modalidade["Matrículas Apuradas"].sum()
+
+    # Formata os valores como strings estilo brasileiro
     for col in ["Carga Horária Total", "Matrículas Apuradas"]:
         resumo_modalidade[col] = resumo_modalidade[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-    total_ch_m = resumo_modalidade["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
-    total_mat_m = resumo_modalidade["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    # Cria a linha de totais já formatada
+    total_row_modalidade = pd.DataFrame([[
+        "Total Geral",
+        f"{total_ch_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+        f"{total_mat_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    ]], columns=resumo_modalidade.columns)
 
-    total_row_modalidade = pd.DataFrame([["Total Geral", 
-                                        f"{total_ch_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
-                                        f"{total_mat_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
-                                        columns=resumo_modalidade.columns)
-
+    # Adiciona ao DataFrame
     resumo_modalidade = pd.concat([resumo_modalidade, total_row_modalidade], ignore_index=True)
+
 
     st.markdown("### 📗 Resumo por Modalidade")
     st.markdown(resumo_modalidade.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
 
     # === TABELA 3: Unidade Operativa ===
-    resumo_uo = df_filtrado.groupby("Unidade Operativa da Turma")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo_uo = df_filtrado.groupby("Unidade Operativa da Turma")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
     resumo_uo = resumo_uo.rename(columns={
         "CH_Apurada_Mes": "Carga Horária Total",
-        "Matricula_Mes": "Matrículas Apuradas"
+        "Matricula_Apurada_Mes": "Matrículas Apuradas"
     })
 
     for col in ["Carga Horária Total", "Matrículas Apuradas"]:
@@ -434,10 +469,10 @@ if 'df' in locals():
     st.markdown(resumo_uo.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
 
     # === TABELA 4: Estado conf. CODEPE ===
-    resumo_estado_codepe = df_filtrado.groupby("Estado conf. CODEPE")[["CH_Apurada_Mes", "Matricula_Mes"]].sum().reset_index()
+    resumo_estado_codepe = df_filtrado.groupby("Estado conf. CODEPE")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
     resumo_estado_codepe = resumo_estado_codepe.rename(columns={
         "CH_Apurada_Mes": "Carga Horária Total",
-        "Matricula_Mes": "Matrículas Apuradas"
+        "Matricula_Apurada_Mes": "Matrículas Apuradas"
     })
 
     for col in ["Carga Horária Total", "Matrículas Apuradas"]:

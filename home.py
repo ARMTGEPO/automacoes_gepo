@@ -46,8 +46,9 @@ if "authenticated" not in st.session_state or not st.session_state["authenticate
     st.stop()
 
 # Menu com páginas
-validador_mensal = st.Page("validador_mensal.py", title="Validador Produção Mensal", icon="📅")
-validador_acumulado = st.Page("validador_acumulado.py", title="Validador Produção Acumulado", icon="📅")
-pg = st.navigation([validador_mensal, validador_acumulado])
+validador_mensal = st.Page("validador_mensal.py", title="Validador Produção Mensal", icon=":material/check:")
+validador_acumulado = st.Page("validador_acumulado.py", title="Validador Produção Acumulado", icon=":material/check:")
+dashboard = st.Page("dashboard.py", title="Dashboard de Produção", icon=":material/analytics:")
+pg = st.navigation([validador_mensal, validador_acumulado, dashboard])
 
 pg.run()
