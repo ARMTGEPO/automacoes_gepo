@@ -5,7 +5,7 @@ from datetime import datetime
 import tempfile
 from email_validator import validate_email, EmailNotValidError
 
-st.set_page_config(page_title="Validador Produção", layout="wide", page_icon=":bar_chart")
+st.set_page_config(page_title="Auditoria de Produção", layout="wide", page_icon=":bar_chart")
 st.logo(image="img/senac_logo.png")
 
 st.markdown("""
@@ -226,7 +226,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     return inconsistencias  # Retorna o dicionário de inconsistências para gerar o Excel
 
 # === Interface Principal ===
-st.title("📝 Validação de Produção Mensal")
+st.title("📝 Auditoria de Produção Mensal")
 username = st.session_state.get("username", "usuário")
 st.markdown(f"Olá, **{username}**! Faça upload do Relatório Analítico Mensal de Produção.")
 
