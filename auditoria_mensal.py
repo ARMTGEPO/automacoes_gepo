@@ -58,8 +58,9 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
 
     # Regra 2 -Turmas Encerradas em Exercício Anterior contabilizando CH
     df_filtrado_2 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
-    mask2 = (df_filtrado_2["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df_filtrado_2["CH_Apurada_Mes"] != 0.00)
-    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df_filtrado_2.loc[mask2, [
+    
+    mask2 = (df["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df["CH_Apurada_Mes"] != 0.00)
+    inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df.loc[mask2, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
         "Estado da Turma", "Estado conf. CODEPE", "CH_Apurada_Mes", "Termino da Execução da Turma"
     ]]
@@ -490,3 +491,5 @@ if 'df' in locals():
 
     st.markdown("### 📒 Resumo por Estado conf. CODEPE")
     st.markdown(resumo_estado_codepe.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
+
+    st.write(primeiro_dia_mes_anterior)
