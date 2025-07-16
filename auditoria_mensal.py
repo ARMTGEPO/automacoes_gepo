@@ -81,7 +81,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     ]].sort_values(["CPF do Aluno", "Turma"])
 
     # Regra 5 - Identificar matrículas de um mesmo CPF em mais de 02 turmas PSG.
-    mask_psg = (df["Recurso Financeiro"] == "PSG") & (df["Estado conf. CODEPE"] == "6 - Em Processo")
+    mask_psg = (df["Recurso Financeiro"] == "PSG")
     cpf_counts = df.loc[mask_psg, "CPF do Aluno"].value_counts().reset_index()
     cpf_counts.columns = ["CPF do Aluno", "count"]
     cpf_invalidos = cpf_counts[cpf_counts["count"] > 2]["CPF do Aluno"]
