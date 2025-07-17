@@ -81,15 +81,61 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     ]].sort_values(["CPF do Aluno", "Turma"])
 
     # Regra 5 - Identificar matrículas de um mesmo CPF em mais de 02 turmas PSG.
-    mask_psg = (df["Recurso Financeiro"] == "PSG")
+    # 1. Filtrar matrículas PSG
+    mask_psg = df["Recurso Financeiro"] == "PSG"
     cpf_counts = df.loc[mask_psg, "CPF do Aluno"].value_counts().reset_index()
     cpf_counts.columns = ["CPF do Aluno", "count"]
     cpf_invalidos = cpf_counts[cpf_counts["count"] > 2]["CPF do Aluno"]
-    mask5 = df["CPF do Aluno"].isin(cpf_invalidos) & mask_psg
-    inconsistencias['CPF com > 2 Turmas PSG'] = df.loc[mask5, [
-        "Matrícula", "Turma", "CPF do Aluno", "Recurso Financeiro", 
-        "Estado conf. CODEPE", "CH_Apurada_Mes"
-    ]].sort_values("CPF do Aluno")
+
+    # 2. Filtrar dados relevantes
+    df_psg = df[df["CPF do Aluno"].isin(cpf_invalidos) & mask_psg].copy()
+
+    # 3. Converter colunas de datas para datetime
+    df_psg["Inicio da Execução da Turma"] = pd.to_datetime(df_psg["Inicio da Execução da Turma"])
+    df_psg["Termino da Execução da Turma"] = pd.to_datetime(df_psg["Termino da Execução da Turma"])
+
+    # 4. Função para identificar conflitos de período entre turmas
+    def identificar_conflitos_simples(group):
+        resultados = []
+
+        for i, row1 in group.iterrows():
+            conflitos = []
+            turma1 = row1["Turma"]
+            ini1 = row1["Inicio da Execução da Turma"]
+            fim1 = row1["Termino da Execução da Turma"]
+
+            for j, row2 in group.iterrows():
+                if i == j:
+                    continue
+                turma2 = row2["Turma"]
+                ini2 = row2["Inicio da Execução da Turma"]
+                fim2 = row2["Termino da Execução da Turma"]
+
+                # Verifica sobreposição de datas
+                if ini1 <= fim2 and ini2 <= fim1:
+                    conflitos.append(turma2)
+
+            # Formatando resultado: turma atual → turmas conflitantes
+            if conflitos:
+                conflito_str = f"{turma1} - {', '.join(sorted(set(map(str, conflitos))))}"
+            else:
+                conflito_str = ""
+
+            resultados.append(conflito_str)
+
+        group["Turmas com Períodos Sobrepostos"] = resultados
+        return group
+
+    # 5. Aplicar função por CPF
+    df_psg = df_psg.groupby("CPF do Aluno", group_keys=False).apply(identificar_conflitos_simples)
+
+    # 6. Adicionar ao dicionário de inconsistências
+    inconsistencias['CPF com + 2 Turmas PSG'] = df_psg[
+        ["Estado da Turma", "Matrícula", "Turma", "CPF do Aluno", 
+        "Estado conf. CODEPE","Inicio da Execução da Turma", 
+        "Termino da Execução da Turma", "Turmas com Períodos Sobrepostos"]
+    ].sort_values("CPF do Aluno")
+
 
     # Regra 6 - Identificar matrículas efetivadas em turmas em processo. Entende-se como matrículas efetivadas aquelas com Estado CODEPE "Aprova, Reprovada ou Evadida".
     mask6 = df["Estado conf. CODEPE"].isin(estados_efetivados) & df["Estado da Turma"].str.contains("Em Processo")
