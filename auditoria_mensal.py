@@ -66,8 +66,8 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     ]]
 
     # Regra 3  - Matrículas que sofreram ajustes de CH na competência
-    mask3 = (df_filtrado_2["Ajuste_Senac_Mes"] != 0.00)
-    inconsistencias['Matrículas com ajuste de CH'] = df_filtrado_2.loc[mask3, [
+    mask3 = (df["Ajuste_Senac_Mes"] != 0.00)
+    inconsistencias['Matrículas com ajuste de CH'] = df.loc[mask3, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
         "Estado da Turma", "Estado conf. CODEPE", "Estado da Matrícula do Aluno", "CH_Apurada_Mes"
     ]]
