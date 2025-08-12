@@ -24,8 +24,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
-
 # === Função para gerar Excel com inconsistências ===
 def gerar_excel_inconsistencias(inconsistencias, output_path="relatorio_inconsistencias.xlsx"):
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
@@ -58,7 +56,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
 
     # Regra 2 -Turmas Encerradas em Exercício Anterior contabilizando CH
     df_filtrado_2 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
-    
     mask2 = (df["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df["CH_Apurada_Mes"] != 0.00)
     inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df.loc[mask2, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
@@ -81,7 +78,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     ]].sort_values(["CPF do Aluno", "Turma"])
 
     # Regra 5 - Identificar matrículas de um mesmo CPF em mais de 02 turmas PSG.
-    # 1. Filtrar matrículas PSG
     mask_psg = df["Recurso Financeiro"] == "PSG"
     cpf_counts = df.loc[mask_psg, "CPF do Aluno"].value_counts().reset_index()
     cpf_counts.columns = ["CPF do Aluno", "count"]
@@ -90,9 +86,13 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     # 2. Filtrar dados relevantes
     df_psg = df[df["CPF do Aluno"].isin(cpf_invalidos) & mask_psg].copy()
 
-    # 3. Converter colunas de datas para datetime
-    df_psg["Inicio da Execução da Turma"] = pd.to_datetime(df_psg["Inicio da Execução da Turma"])
-    df_psg["Termino da Execução da Turma"] = pd.to_datetime(df_psg["Termino da Execução da Turma"])
+    # 3. Converter colunas de datas para datetime (CORRIGIDO: dayfirst=True)
+    df_psg["Inicio da Execução da Turma"] = pd.to_datetime(
+        df_psg["Inicio da Execução da Turma"], dayfirst=True, errors='coerce'
+    )
+    df_psg["Termino da Execução da Turma"] = pd.to_datetime(
+        df_psg["Termino da Execução da Turma"], dayfirst=True, errors='coerce'
+    )
 
     # 4. Função para identificar conflitos de período entre turmas
     def identificar_conflitos_simples(group):
@@ -135,7 +135,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         "Estado conf. CODEPE","Inicio da Execução da Turma", 
         "Termino da Execução da Turma", "Turmas com Períodos Sobrepostos"]
     ].sort_values("CPF do Aluno")
-
 
     # Regra 6 - Identificar matrículas efetivadas em turmas em processo. Entende-se como matrículas efetivadas aquelas com Estado CODEPE "Aprova, Reprovada ou Evadida".
     mask6 = df["Estado conf. CODEPE"].isin(estados_efetivados) & df["Estado da Turma"].str.contains("Em Processo")
@@ -294,13 +293,21 @@ competencia_input = st.sidebar.text_input("🗓️ Informe a competência (MM/AA
 uploaded_file = st.sidebar.file_uploader("📂 Selecione o arquivo CSV", type=["csv"])
 
 if competencia_input and uploaded_file:
+    # >>>>>>> alteração: separar a validação de competência <<<<<<<<
     try:
         competencia_dt = datetime.strptime(competencia_input, "%m/%Y")
-        primeiro_dia_mes_anterior = competencia_dt.replace(day=1)
+    except ValueError:
+        st.error("❌ Competência inválida. Use o formato MM/AAAA.")
+        st.stop()
 
+    primeiro_dia_mes_anterior = competencia_dt.replace(day=1)
+
+    # restante do processamento em bloco separado
+    try:
         df = pd.read_csv(uploaded_file, encoding='latin-1', sep=';')
         df["CH_Apurada_Mes"] = df["CH_Apurada_Mes"].astype(str).str.replace(',', '.').astype(float)
         df["Ajuste_Senac_Mes"] = df["Ajuste_Senac_Mes"].astype(str).str.replace(',', '.').astype(float)
+        # Conversão com dayfirst já aplicada aqui
         df["Termino da Execução da Turma"] = pd.to_datetime(df["Termino da Execução da Turma"], dayfirst=True, errors='coerce')
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
@@ -335,8 +342,6 @@ if competencia_input and uploaded_file:
 
         st.sidebar.success("✅ Relatórios gerados com sucesso!")
 
-    except ValueError:
-        st.error("❌ Competência inválida. Use o formato MM/AAAA.")
     except Exception as e:
         st.error(f"❌ Erro ao processar o arquivo: {e}")
 elif uploaded_file and not competencia_input:
@@ -446,7 +451,6 @@ if 'df' in locals():
     valor_mt_ajuste = round(df_filtrado['Ajuste_Matriculas_Mes'].sum(), 0)
     total_mt_ajuste = f'{valor_mt_ajuste:,.0f}'.replace(',','.')
 
-
     with col1:
         st.metric("#### Carga Horária Apurada no Mês", total_ch)
 
@@ -461,10 +465,7 @@ if 'df' in locals():
     st.markdown(resumo.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
 
     # === TABELA 2: Modalidade ===
-    # Agrupamento e soma
     resumo_modalidade = df_filtrado.groupby("Modalidade")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
-
-    # Renomeando colunas
     resumo_modalidade = resumo_modalidade.rename(columns={
         "CH_Apurada_Mes": "Carga Horária Total",
         "Matricula_Apurada_Mes": "Matrículas Apuradas"
@@ -485,9 +486,7 @@ if 'df' in locals():
         f"{total_mat_m:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
     ]], columns=resumo_modalidade.columns)
 
-    # Adiciona ao DataFrame
     resumo_modalidade = pd.concat([resumo_modalidade, total_row_modalidade], ignore_index=True)
-
 
     st.markdown("### 📗 Resumo por Modalidade")
     st.markdown(resumo_modalidade.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
