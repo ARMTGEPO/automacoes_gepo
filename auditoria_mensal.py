@@ -357,11 +357,13 @@ if 'df' in locals():
         col1, col2 = st.columns(2)
 
         with col1:
+            filtro_turma = st.multiselect("Turma", options=sorted(df['Turma'].dropna().unique()), placeholder="Selecione turmas")
             filtro_estado_turma = st.multiselect("Estado da Turma", options=sorted(df["Estado da Turma"].dropna().unique()), placeholder="Selecione estados")
             filtro_recurso = st.multiselect("Recurso Financeiro", options=sorted(df["Recurso Financeiro"].dropna().unique()), placeholder="Selecione recursos")
             filtro_estado_matricula = st.multiselect("Estado da Matrícula do Aluno", options=sorted(df["Estado da Matrícula do Aluno"].dropna().unique()), placeholder="Selecione estados")
             filtro_condicao = st.multiselect("Condição", options=sorted(df["Condição"].dropna().unique()), placeholder="Selecione condições")
         with col2:
+            filtro_matricula = st.multiselect("Matrícula", options=sorted(df["Matrícula"].dropna().unique()), placeholder="Selecione matrículas")
             filtro_estado_codepe = st.multiselect("Estado conf. CODEPE", options=sorted(df["Estado conf. CODEPE"].dropna().unique()),  placeholder="Selecione estados")
             filtro_uo = st.multiselect("Unidade Operativa da Turma", options=sorted(df["Unidade Operativa da Turma"].dropna().unique()), placeholder="Selecione unidades")
             filtro_modalidade = st.multiselect("Modalidade", options=sorted(df["Modalidade"].dropna().unique()), placeholder="Selecione modalidades")
@@ -386,6 +388,10 @@ if 'df' in locals():
         df_filtrado = df_filtrado[df_filtrado["Quadro de Ação"].isin(filtro_quadro_acao)]
     if filtro_condicao:
         df_filtrado = df_filtrado[df_filtrado["Condição"].isin(filtro_condicao)]
+    if filtro_turma:
+        df_filtrado = df_filtrado[df_filtrado["Turma"].isin(filtro_turma)]
+    if filtro_matricula:
+        df_filtrado = df_filtrado[df_filtrado["Matrícula"].isin(filtro_matricula)]
 
     # === Agrupamento por Recurso Financeiro ===
     resumo = df_filtrado.groupby("Recurso Financeiro")[["CH_Apurada_Mes", "Matricula_Apurada_Mes"]].sum().reset_index()
@@ -537,4 +543,29 @@ if 'df' in locals():
     st.markdown("### 📒 Resumo por Estado conf. CODEPE")
     st.markdown(resumo_estado_codepe.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
 
-    st.write(primeiro_dia_mes_anterior)
+    # === TABELA 5: Estado Gerencial ===
+    resumo_estado_gerencial = df_filtrado.groupby("Estado da Matrícula do Aluno")[["CH_Apurada_Mes", "Matricula_Apurada_Mes", "Ajuste_Matriculas_Mes"]].sum().reset_index()
+    resumo_estado_gerencial = resumo_estado_gerencial.rename(columns={
+        "CH_Apurada_Mes": "Carga Horária Total",
+        "Matricula_Apurada_Mes": "Matrículas Apuradas",
+        "Ajuste_Matriculas_Mes": "Ajuste Matrículas"
+    })
+
+    for col in ["Carga Horária Total", "Matrículas Apuradas", "Ajuste Matrículas"]:
+        resumo_estado_gerencial[col] = resumo_estado_gerencial[col].map(lambda x: f"{x:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
+    total_ch_gc = resumo_estado_gerencial["Carga Horária Total"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_mat_gc = resumo_estado_gerencial["Matrículas Apuradas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+    total_ajuste_gc = resumo_estado_gerencial["Ajuste Matrículas"].str.replace('.', '', regex=False).str.replace(',', '.', regex=False).astype(float).sum()
+
+    total_row_gc = pd.DataFrame([["Total Geral", 
+                                f"{total_ch_gc:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                f"{total_mat_gc:,.0f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                f"{total_ajuste_gc:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")]],
+                                columns=resumo_estado_gerencial.columns)
+
+    resumo_estado_gerencial = pd.concat([resumo_estado_gerencial, total_row_gc], ignore_index=True)
+
+    st.markdown("### 📒 Resumo por Estado da Matrícula do Aluno")
+    st.markdown(resumo_estado_gerencial.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
+
