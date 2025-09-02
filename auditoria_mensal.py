@@ -65,9 +65,9 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     # Regra 3  - Matrículas que sofreram ajustes de CH na competência
     mask3 = (df["Ajuste_Senac_Mes"] != 0.00)
     inconsistencias['Matrículas com ajuste de CH'] = df.loc[mask3, [
-        "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
+        "Unidade Operativa da Turma", "Matrícula", "Turma", "Título do Curso", "Nome do Aluno", 
         "Estado da Turma", "Estado conf. CODEPE", "Estado da Matrícula do Aluno", "CH_Apurada_Mes", "Inicio da Execução da Turma", "Termino da Execução da Turma",
-        "Data de Ocorrência do Estado da Matrícula"
+        "Data de Ocorrência do Estado da Matrícula", "Data de Lançamento do Estado da Matrícula"
     ]]
 
     # Regra 4 - Identificar múltiplas matrículas ativas por CPF na mesma turma.
