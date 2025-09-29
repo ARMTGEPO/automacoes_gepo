@@ -55,7 +55,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     ]]
 
     # Regra 2 -Turmas Encerradas em Exercício Anterior contabilizando CH
-    df_filtrado_2 = df[df["Estado conf. CODEPE"] != "4 - Desistente"]
     mask2 = (df["Termino da Execução da Turma"] < primeiro_dia_mes_anterior) & (df["CH_Apurada_Mes"] != 0.00)
     inconsistencias['Turmas Encerradas em Exercício Anterior contabilizando CH'] = df.loc[mask2, [
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", 
