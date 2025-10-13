@@ -130,7 +130,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     df_psg = df_psg.groupby("CPF do Aluno", group_keys=False).apply(identificar_conflitos_simples)
 
     # 6. Adicionar ao dicionário de inconsistências
-    inconsistencias['CPF com + 2 Turmas PSG'] = df_psg[
+    inconsistencias['CPF com 3 + Turmas PSG'] = df_psg[
         ["Estado da Turma", "Matrícula", "Turma", "CPF do Aluno", 
         "Estado conf. CODEPE","Inicio da Execução da Turma", 
         "Termino da Execução da Turma", "Turmas com Períodos Sobrepostos"]
@@ -182,7 +182,45 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     inconsistencias['E-mails Inválidos'] = df_maiores[df_maiores["Email Invalido"] == True][[
         "Unidade Operativa da Turma", "Matrícula", "Turma", "Nome do Aluno", "CPF do Aluno", "E-mail"
     ]]
-    
+
+    # Regra 8 - Testar códigos de origem de programas incorretos
+    mask_13 = (df["Cod_Origem"] == 13) & (~df["Sigla da Turma"].str.startswith("EDUC", na=False))
+    mask_9_nao_educ = (df["Cod_Origem"] == 9) & (~df["Sigla da Turma"].str.startswith("EDUC", na=False))
+    mask_9_posterior = (df["Cod_Origem"] == 9) & (
+        pd.to_datetime(df["Inicio da Execução da Turma"], errors='coerce') > pd.Timestamp("2025-06-30")
+    )
+    mask_8_sem_sesc = (df["Cod_Origem"] == 8) & (~df["Sigla da Turma"].str.contains("SESC", na=False))
+    mask_12 = (df["Cod_Origem"] == 12)
+
+    # Cria uma coluna com o tipo de inconsistência (linha por linha)
+    df["Tipo de Inconsistência"] = None
+    df.loc[mask_13, "Tipo de Inconsistência"] = "Código Origem 13 EDUC em turma não EDUC"
+    df.loc[mask_9_nao_educ, "Tipo de Inconsistência"] = "Código Origem 9 EDUC em turma não EDUC"
+    df.loc[mask_9_posterior, "Tipo de Inconsistência"] = "Código Origem 9 posterior a junho de 2025"
+    df.loc[mask_8_sem_sesc, "Tipo de Inconsistência"] = "Código Origem 8 em turmas que não SESC"
+    df.loc[mask_12, "Tipo de Inconsistência"] = "Código de origem 12 turmas de convênio"
+
+    # Filtra apenas as linhas que têm alguma inconsistência
+    mask_total = (
+        mask_13 | mask_9_nao_educ | mask_9_posterior | mask_8_sem_sesc | mask_12
+    )
+
+    inconsistencias['Regra 8 - Códigos de Origem incorretos'] = df.loc[mask_total, [
+        "Unidade Operativa da Turma",
+        "Matrícula",
+        "Sigla da Turma",
+        "Turma",
+        "Título do Curso",
+        "Nome do Aluno",
+        "Estado da Turma",
+        "Estado conf. CODEPE",
+        "CH_Apurada_Mes",
+        "Inicio da Execução da Turma",
+        "Termino da Execução da Turma",
+        "Tipo de Inconsistência"
+    ]]
+
+
     # Geração do PDF
     pdf = FPDF(orientation='L')
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -280,11 +318,12 @@ with st.expander("📖 Validações aplicadas", expanded=True):
     st.write("""
     1. **Desistentes com CH Apurada**: Verifica se alunos desistentes têm carga horária apurada no período.
     2. **Turmas Encerradas em Exercício Anterior contabilizando CH**: Identifica turmas encerradas no mês anterior com carga horária apurada no período.
-    2. **Ajustes de CH realizados na competência**: Identifica os ajustes de CH no período visando identificar possíveis erros.
-    3. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma com CH para ambas as matrículas.
-    4. **CPF com > 2 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
-    5. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo".
-    6. **E-mails Inválidos**: Valida e-mails de alunos maiores de 18 anos, verificando se estão no formato correto e se não pertencem a domínios comuns incorretos.
+    3. **Ajustes de CH realizados na competência**: Identifica os ajustes de CH no período visando identificar possíveis erros.
+    4. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma com CH para ambas as matrículas.
+    5. **CPF com > 2 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
+    6. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo".
+    7. **E-mails Inválidos**: Valida e-mails de alunos maiores de 18 anos, verificando se estão no formato correto e se não pertencem a domínios comuns incorretos.
+    8. **Códigos de Origem**: Verifica se os códigos de origem dos alunos estão corretos e se correspondem às turmas em que estão matriculados.
     Essas validações ajudam a garantir a integridade dos dados e a conformidade com as regras do sistema.
              """)
 
@@ -307,8 +346,7 @@ if competencia_input and uploaded_file:
         df = pd.read_csv(uploaded_file, encoding='latin-1', sep=';')
         df["CH_Apurada_Mes"] = df["CH_Apurada_Mes"].astype(str).str.replace(',', '.').astype(float)
         df["Ajuste_Senac_Mes"] = df["Ajuste_Senac_Mes"].astype(str).str.replace(',', '.').astype(float)
-        # Conversão com dayfirst já aplicada aqui
-        df["Termino da Execução da Turma"] = pd.to_datetime(df["Termino da Execução da Turma"], dayfirst=True, errors='coerce')
+        df["Termino da Execução da Turma"] = pd.to_datetime(df["Termino da Execução da Turma"])
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
             # Primeiro geramos o PDF e obtemos as inconsistências
@@ -568,4 +606,3 @@ if 'df' in locals():
 
     st.markdown("### 📒 Resumo por Estado da Matrícula do Aluno")
     st.markdown(resumo_estado_gerencial.to_html(index=False, escape=False, classes='custom-table'), unsafe_allow_html=True)
-
