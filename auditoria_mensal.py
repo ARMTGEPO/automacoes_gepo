@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from fpdf import FPDF, XPos, YPos
 from datetime import datetime
 import tempfile
 from email_validator import validate_email, EmailNotValidError
@@ -40,7 +39,7 @@ def gerar_excel_inconsistencias(inconsistencias, output_path="relatorio_inconsis
         writer.close()
 
 # === Função de validação e geração do relatório ===
-def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relatorio_inconsistencias.pdf"):
+def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior):
     inconsistencias = {}
     estados_efetivados = ["1 - Aprovado", "2 - Reprovado", "3 - Evadido"]
 
@@ -85,14 +84,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
 
     # 2. Filtrar dados relevantes
     df_psg = df[df["CPF do Aluno"].isin(cpf_invalidos) & mask_psg].copy()
-
-    # 3. Converter colunas de datas para datetime (CORRIGIDO: dayfirst=True)
-    df_psg["Inicio da Execução da Turma"] = pd.to_datetime(
-        df_psg["Inicio da Execução da Turma"], dayfirst=True, errors='coerce'
-    )
-    df_psg["Termino da Execução da Turma"] = pd.to_datetime(
-        df_psg["Termino da Execução da Turma"], dayfirst=True, errors='coerce'
-    )
 
     # 4. Função para identificar conflitos de período entre turmas
     def identificar_conflitos_simples(group):
@@ -187,7 +178,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
     mask_13 = (df["Cod_Origem"] == 13) & (~df["Sigla da Turma"].str.startswith("EDUC", na=False))
     mask_9_nao_educ = (df["Cod_Origem"] == 9) & (~df["Sigla da Turma"].str.startswith("EDUC", na=False))
     mask_9_posterior = (df["Cod_Origem"] == 9) & (
-        pd.to_datetime(df["Inicio da Execução da Turma"], errors='coerce') > pd.Timestamp("2025-06-30")
+        pd.to_datetime(df["Inicio da Execução da Turma"], dayfirst=True,errors='coerce') > pd.Timestamp("2025-06-30")
     )
     mask_8_sem_sesc = (df["Cod_Origem"] == 8) & (~df["Sigla da Turma"].str.contains("SESC", na=False))
     mask_12 = (df["Cod_Origem"] == 12)
@@ -205,7 +196,7 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         mask_13 | mask_9_nao_educ | mask_9_posterior | mask_8_sem_sesc | mask_12
     )
 
-    inconsistencias['Regra 8 - Códigos de Origem incorretos'] = df.loc[mask_total, [
+    inconsistencias['Códigos de Origem incorretos'] = df.loc[mask_total, [
         "Unidade Operativa da Turma",
         "Matrícula",
         "Sigla da Turma",
@@ -220,92 +211,26 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, output_path="relato
         "Tipo de Inconsistência"
     ]]
 
-
-    # Geração do PDF
-    pdf = FPDF(orientation='L')
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    table_header_color = (100, 180, 255)
-    row_color = (220, 230, 240)
-    alternate_row_color = (240, 248, 255)
-
-    competencia = primeiro_dia_mes_anterior.strftime('%m/%Y')
-    pdf.add_page()
-    pdf.set_font('Helvetica', 'B', 24)
-    pdf.cell(0, 40, "Relatório de Inconsistências", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.set_font('Helvetica', '', 16)
-    pdf.cell(0, 20, f"Data: {datetime.today().strftime('%d/%m/%Y')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.cell(0, 20, f"Competência: {competencia}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-    pdf.cell(0, 20, f"Total de Validações: {len(inconsistencias)}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-
-    pdf.add_page()
-    pdf.set_font('Helvetica', 'B', 18)
-    pdf.cell(0, 10, "Validações Realizadas", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(10)
-
-    max_tipo_width = max([pdf.get_string_width(tipo) for tipo in inconsistencias.keys()]) + 10
-    summary_width = min(max(max_tipo_width, 100), 220)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.set_fill_color(*table_header_color)
-    pdf.cell(summary_width, 8, "Tipo de Inconsistência", border=1, align='C', fill=True)
-    pdf.cell(30, 8, "Registros", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True)
-
-    pdf.set_font('Helvetica', '', 9)
-    for i, (tipo, df_inc) in enumerate(inconsistencias.items()):
-        fill = alternate_row_color if i % 2 else row_color
-        pdf.set_fill_color(*fill)
-        display_text = tipo
-        if pdf.get_string_width(tipo) > summary_width - 5:
-            while pdf.get_string_width(display_text + "...") > summary_width - 5 and len(display_text) > 10:
-                display_text = display_text[:-1]
-            display_text = display_text.rstrip() + "..." if len(display_text) < len(tipo) else display_text
-        pdf.cell(summary_width, 7, display_text, border=1, align='L', fill=True)
-        pdf.cell(30, 7, str(len(df_inc)), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True)
-
-    for tipo, df_inc in inconsistencias.items():
-        if not df_inc.empty:
-            pdf.add_page()
-            pdf.set_font('Helvetica', 'B', 14)
-            pdf.cell(0, 8, f"Inconsistência: {tipo}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.ln(3)
-            pdf.set_font('Helvetica', '', 8)
-            col_widths = []
-            for col in df_inc.columns:
-                header_width = pdf.get_string_width(str(col)) + 4
-                sample_values = df_inc[col].dropna().sample(min(20, len(df_inc)), random_state=1)
-                max_value_width = max([pdf.get_string_width(str(val)) + 4 for val in sample_values]) if not sample_values.empty else 0
-                col_width = max(header_width, max_value_width, 20)
-                col_widths.append(col_width)
-
-            total_width = sum(col_widths)
-            if total_width > 280:
-                scale_factor = 280 / total_width
-                col_widths = [w * scale_factor for w in col_widths]
-
-            pdf.set_font('Helvetica', 'B', 8)
-            pdf.set_fill_color(*table_header_color)
-            for col, width in zip(df_inc.columns, col_widths):
-                pdf.cell(width, 6, str(col), border=1, align='C', fill=True)
-            pdf.ln()
-
-            pdf.set_font('Helvetica', '', 8)
-            for row_idx, row in df_inc.iterrows():
-                fill = alternate_row_color if row_idx % 2 else row_color
-                pdf.set_fill_color(*fill)
-                for value, width in zip(row, col_widths):
-                    text = str(value)
-                    if pdf.get_string_width(text) > width - 2:
-                        while pdf.get_string_width(text + "...") > width - 2 and len(text) > 3:
-                            text = text[:-1]
-                        text = text + "..." if len(text) > 3 else text
-                    pdf.cell(width, 6, text, border=1, align='C', fill=True)
-                pdf.ln()
-
-    pdf.add_page()
-    pdf.set_font('Helvetica', 'I', 8)
-    pdf.cell(0, 8, "Relatório gerado automaticamente pelo sistema de validação", align='C')
-    pdf.cell(0, 8, f"{username}", align='C')
-    pdf.output(output_path)
+    # Regra 9 - Ocorrência de Desistência e Evasão, antes do Inicio da Turma
+    mask_desistencia_antes = ((df["Estado da Matrícula do Aluno"] == "Desistente") & (df["Data de Ocorrência do Estado da Matrícula"] < df["Inicio da Execução da Turma"]))
+    mask_evasao_antes = ((df["Estado da Matrícula do Aluno"] == "Evadido") & (df["Data de Ocorrência do Estado da Matrícula"] < df["Inicio da Execução da Turma"]))
+    mask_total_9 = (mask_desistencia_antes | mask_evasao_antes)
+    inconsistencias['Ocorrência de Desistência e Evasão antes do Início da Turma'] = df.loc[mask_total_9, [
+        "Unidade Operativa da Turma",
+        "Matrícula",
+        "Sigla da Turma",
+        "Turma",
+        "Título do Curso",
+        "Nome do Aluno",
+        "Estado da Turma",
+        "Estado da Matrícula do Aluno",
+        "Estado conf. CODEPE",
+        "CH_Apurada_Mes",
+        "Inicio da Execução da Turma",
+        "Termino da Execução da Turma",
+        "Data de Ocorrência do Estado da Matrícula",
+        "Data de Lançamento do Estado da Matrícula"
+    ]]
     
     return inconsistencias  # Retorna o dicionário de inconsistências para gerar o Excel
 
@@ -320,10 +245,12 @@ with st.expander("📖 Validações aplicadas", expanded=True):
     2. **Turmas Encerradas em Exercício Anterior contabilizando CH**: Identifica turmas encerradas no mês anterior com carga horária apurada no período.
     3. **Ajustes de CH realizados na competência**: Identifica os ajustes de CH no período visando identificar possíveis erros.
     4. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma com CH para ambas as matrículas.
-    5. **CPF com > 2 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
+    5. **CPF com => 3 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
     6. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo".
     7. **E-mails Inválidos**: Valida e-mails de alunos maiores de 18 anos, verificando se estão no formato correto e se não pertencem a domínios comuns incorretos.
     8. **Códigos de Origem**: Verifica se os códigos de origem dos alunos estão corretos e se correspondem às turmas em que estão matriculados.
+    9. **Ocorrência de Desistência e Evasão antes do Início da Turma**: Identifica matrículas com estado "Desistente" ou "Evadido" cuja data de ocorrência é anterior à data de início da turma.
+    
     Essas validações ajudam a garantir a integridade dos dados e a conformidade com as regras do sistema.
              """)
 
@@ -346,37 +273,28 @@ if competencia_input and uploaded_file:
         df = pd.read_csv(uploaded_file, encoding='latin-1', sep=';')
         df["CH_Apurada_Mes"] = df["CH_Apurada_Mes"].astype(str).str.replace(',', '.').astype(float)
         df["Ajuste_Senac_Mes"] = df["Ajuste_Senac_Mes"].astype(str).str.replace(',', '.').astype(float)
-        df["Termino da Execução da Turma"] = pd.to_datetime(df["Termino da Execução da Turma"])
+        df["Termino da Execução da Turma"] = pd.to_datetime(df["Termino da Execução da Turma"], dayfirst=True, errors='coerce')
+        df["Inicio da Execução da Turma"] = pd.to_datetime(df["Inicio da Execução da Turma"], dayfirst=True, errors='coerce')
+        df["Data de Ocorrência do Estado da Matrícula"] = pd.to_datetime(df["Data de Ocorrência do Estado da Matrícula"], dayfirst=True, errors='coerce')
+        df["Data de Lançamento do Estado da Matrícula"] = pd.to_datetime(df["Data de Lançamento do Estado da Matrícula"], dayfirst=True, errors='coerce')
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-            # Primeiro geramos o PDF e obtemos as inconsistências
-            inconsistencias = validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior, tmp_pdf.name)
             
-            # Agora geramos o Excel em um arquivo temporário separado
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
-                gerar_excel_inconsistencias(inconsistencias, tmp_excel.name)
-                
-                with open(tmp_pdf.name, "rb") as f_pdf:
-                    st.sidebar.download_button(
-                        label="Baixar PDF",
-                        data=f_pdf,
-                        file_name="relatorio_inconsistencias.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        type='primary',
-                        icon=":material/download:"
-                    )
+        # Agora geramos o Excel em um arquivo temporário separado
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_excel:
 
-                with open(tmp_excel.name, "rb") as f_excel:
-                    st.sidebar.download_button(
-                        label="Baixar Excel",
-                        data=f_excel,
-                        file_name="relatorio_inconsistencias.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        type='secondary',
-                        icon=":material/download:"
-                    )
+            inconsistencias = validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior)
+            gerar_excel_inconsistencias(inconsistencias, tmp_excel.name)
+            
+            with open(tmp_excel.name, "rb") as f_excel:
+                st.sidebar.download_button(
+                    label="Baixar Excel",
+                    data=f_excel,
+                    file_name="relatorio_inconsistencias.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    type='secondary',
+                    icon=":material/download:"
+                )
 
         st.sidebar.success("✅ Relatórios gerados com sucesso!")
 
