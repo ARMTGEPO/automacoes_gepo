@@ -245,7 +245,7 @@ with st.expander("📖 Validações aplicadas", expanded=True):
     2. **Turmas Encerradas em Exercício Anterior contabilizando CH**: Identifica turmas encerradas no mês anterior com carga horária apurada no período.
     3. **Ajustes de CH realizados na competência**: Identifica os ajustes de CH no período visando identificar possíveis erros.
     4. **CPF com Múltiplas Matrículas na mesma turma**: Detecta alunos com mais de uma matrícula na mesma turma com CH para ambas as matrículas.
-    5. **CPF com => 3 Turmas PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas.
+    5. **Triplo PSG**: Verifica se alunos com recurso PSG estão em mais de duas turmas que ocorreram de forma simultaneamente.
     6. **Efetivados em Turmas Ativas**: Identifica alunos com estado no CODEPE "1 - Aprovado", "2 - Reprovado", "3 - Evadido" em turmas "Em processo".
     7. **E-mails Inválidos**: Valida e-mails de alunos maiores de 18 anos, verificando se estão no formato correto e se não pertencem a domínios comuns incorretos.
     8. **Códigos de Origem**: Verifica se os códigos de origem dos alunos estão corretos e se correspondem às turmas em que estão matriculados.
