@@ -119,13 +119,24 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior):
 
     # 5. Aplicar função por CPF
     df_psg = df_psg.groupby("CPF do Aluno", group_keys=False).apply(identificar_conflitos_simples)
-
+    
     # 6. Adicionar ao dicionário de inconsistências
     inconsistencias['CPF com 3 + Turmas PSG'] = df_psg[
-        ["Estado da Turma", "Matrícula", "Turma", "CPF do Aluno", 
-        "Estado conf. CODEPE","Inicio da Execução da Turma", 
-        "Termino da Execução da Turma", "Turmas com Períodos Sobrepostos"]
-    ].sort_values("CPF do Aluno")
+        [
+            "Unidade Operativa da Turma",
+            "Inicio da Execução da Turma",
+            "Termino da Execução da Turma",
+            "Turma",
+            "Título do Curso",
+            "Matrícula",
+            "CPF do Aluno",
+            "Nome do Aluno",
+            "Modalidade Recurso",
+            "Estado da Matrícula do Aluno",
+            "Estado da Turma",
+            "Data de Lançamento do Estado da Matrícula",
+            "Data de Ocorrência do Estado da Matrícula"
+        ]].sort_values("CPF do Aluno")
 
     # Regra 6 - Identificar matrículas efetivadas em turmas em processo. Entende-se como matrículas efetivadas aquelas com Estado CODEPE "Aprova, Reprovada ou Evadida".
     mask6 = df["Estado conf. CODEPE"].isin(estados_efetivados) & df["Estado da Turma"].str.contains("Em Processo")
