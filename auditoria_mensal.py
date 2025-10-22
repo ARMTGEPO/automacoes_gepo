@@ -131,7 +131,6 @@ def validar_e_gerar_relatorio(df, primeiro_dia_mes_anterior):
             "Matrícula",
             "CPF do Aluno",
             "Nome do Aluno",
-            "Modalidade Recurso",
             "Estado da Matrícula do Aluno",
             "Estado da Turma",
             "Data de Lançamento do Estado da Matrícula",
