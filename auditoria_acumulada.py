@@ -167,31 +167,6 @@ def validar_e_gerar_relatorio(df_acc):
 
             inconsistencias["Triplo PSG"] = resumo_conflitos.copy()
 
-    # ==========================================================
-    # === 3 TRATAMENTO: Turmas com Atendimento Remoto ========
-    # ==========================================================
-    df_atendimento_remoto = df[df["Tipo de Ensino"] == "6 - Atendimento Remoto"]
-    if not df_atendimento_remoto.empty:
-        resumo_conflitos_2 = df_atendimento_remoto[
-            [
-                "Unidade Operativa da Turma",
-                "Inicio da Execução da Turma",
-                "Termino da Execução da Turma",
-                "Turma",
-                "Título do Curso",
-                "Matrícula",
-                "CPF do Aluno",
-                "Nome do Aluno",
-                "Modalidade Recurso",
-                "Estado da Matrícula do Aluno",
-                "Estado da Turma",
-                "Data de Lançamento do Estado da Matrícula",
-                "Data de Ocorrência do Estado da Matrícula",
-            ]
-        ].sort_values(["CPF do Aluno", "Inicio da Execução da Turma"])
-
-        inconsistencias["Turmas com Atendimento Remoto"] = resumo_conflitos_2.copy()
-
     return inconsistencias
 
 
@@ -214,7 +189,6 @@ uploaded_file = st.sidebar.file_uploader("📂 Selecione o arquivo CSV", type=["
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file, sep=';', encoding='latin1')
-        st.dataframe(df.head(5))
 
         # Converter datas
         for c in [
